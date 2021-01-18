@@ -6037,7 +6037,8 @@ class lexer_base
         value_separator,  ///< the value separator `,`
         parse_error,      ///< indicating a parse error
         end_of_input,     ///< indicating the end of the input buffer
-        literal_or_value  ///< a literal or the begin of a value (only for diagnostics)
+        literal_or_value, ///< a literal or the begin of a value (only for diagnostics)
+        value_hexadecimal,
     };
 
     /// return name of values of type token_type (only used for errors)
@@ -7042,6 +7043,13 @@ scan_number_zero:
                 goto scan_number_exponent;
             }
 
+            case 'x': // hexadecimal support
+            case 'X':
+            {
+                number_type = token_type::value_hexadecimal;
+                goto scan_number_any1;
+            }
+
             default:
                 goto scan_number_done;
         }
@@ -7060,6 +7068,16 @@ scan_number_any1:
             case '7':
             case '8':
             case '9':
+            case 'a': // hexadecimal support
+            case 'b':
+            case 'c':
+            case 'd': // case 'e' see below
+            case 'f':
+            case 'A':
+            case 'B':
+            case 'C':
+            case 'D': // case 'E' see below
+            case 'F':
             {
                 add(current);
                 goto scan_number_any1;
@@ -7075,6 +7093,8 @@ scan_number_any1:
             case 'E':
             {
                 add(current);
+                if (number_type == token_type::value_hexadecimal) // hexadecimal support
+                    goto scan_number_any1;
                 goto scan_number_exponent;
             }
 
@@ -7261,6 +7281,22 @@ scan_number_done:
                 if (value_integer == x)
                 {
                     return token_type::value_integer;
+                }
+            }
+        }
+        else if (number_type == token_type::value_hexadecimal)
+        {
+            const auto x = std::strtoull(token_buffer.data(), &endptr, 16);
+
+            // we checked the number format before
+            JSON_ASSERT(endptr == token_buffer.data() + token_buffer.size());
+
+            if (errno == 0)
+            {
+                value_unsigned = static_cast<number_unsigned_t>(x);
+                if (value_unsigned == x)
+                {
+                    return token_type::value_unsigned;
                 }
             }
         }
